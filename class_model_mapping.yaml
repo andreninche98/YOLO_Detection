@@ -1,0 +1,5 @@
+class_model_mapping:
+  person: "YOLO"
+  bed: "YOLO"
+  bottle: "TINY"
+  clock: "TINY"

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Detection Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+        }
+        .sidebar {
+            height: 100%;
+            width: 0;
+            position: fixed;
+            z-index: 1;
+            top: 0;
+            left: 0;
+            background-color: #f1f1f1;
+            color: #111111;
+            overflow-x: hidden;
+            transition: 0.5s;
+            padding-top: 60px;
+        }
+        .sidebar a {
+            padding: 10px 12px;
+            text-decoration: none;
+            font-size: 25px;
+            color: #111111;
+            display: block;
+            transition: 0.3s;
+        }
+        .sidebar a:hover {
+            color: #FF0000;
+        }
+        .sidebar .closebtn {
+            position: absolute;
+            top: 0;
+            right: 25px;
+            font-size: 36px;
+            margin-left: 50px;
+        }
+        .openbtn {
+            font-size: 20px;
+            cursor: pointer;
+            background-color: #f1f1f1;
+            color: #111111;
+            padding: 10px 15px;
+            border: none;
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 2;
+        }
+        .main-content {
+            margin-left: 0;
+            padding: 8px 16px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            transition: margin-left 0.5s;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 18px;
+            color: blue;
+        }
+        #video-feed {
+            border: 2px solid black;
+            margin: 10px;
+        }
+        .button-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        button.action-btn {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        .model-classes {
+            margin: 10px 0;
+        }
+        .model-classes label {
+            margin-right: 10px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+</head>
+<body>
+    <div class="sidebar" id="mySideBar">
+        <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
+        <a href="#" onclick="selectWebcam('0')">Integrated Webcam</a>
+        <a href="#" onclick="selectWebcam('2')">USB Webcam</a>
+        <a href="#" onclick="viewResults()">View Results</a>
+    </div>
+    <div class="main-content">
+        <button class="openbtn" onclick="openNav()">☰ Webcams</button>
+        <h1>Video Detection Control</h1>
+        <div class="button-container">
+            <button class="action-btn" onclick="startStream()">Start Stream</button>
+            <button class="action-btn" onclick="stopStream()">Stop Stream</button>
+            <button class="action-btn" onclick="detect()">Detect</button>
+        </div>
+        <div id="class-selectors"></div>
+        <div id="status">Status: Unknown</div>
+        <img id="video-feed" src="" alt="Video-Feed" width="640" height="480">
+    </div>
+
+    <script>
+        const socket = io();
+        let selectedSourceId = 0;
+
+        async function startStream() {
+            const response = await fetch('/start', { method: 'POST'});
+            const result = await response.json();
+            updateStatus(result.status);
+        }
+
+        async function stopStream() {
+            const response = await fetch('/stop', { method: 'POST' });
+            const result = await response.json();
+            updateStatus(result.status);
+        }
+
+        async function detect() {
+            const response = await fetch('/detect', { method: 'POST' });
+            const result = await response.json();
+            updateStatus(result.status);
+        }
+
+        async function getStatus() {
+            const response = await fetch('/status');
+            const result = await response.json();
+            updateStatus(result.status);
+        }
+
+        function updateStatus(status) {
+            document.getElementById('status').innerText = 'Status: ' + status;
+        }
+
+        function selectWebcam(sourceId) {
+            selectedSourceId = sourceId;
+
+        }
+
+        function viewResults() {
+            window.location.href = '/results'
+        }
+
+        // Check status periodically
+        setInterval(getStatus, 1000);
+
+        socket.on('video_feed', function (data){
+            console.log('Received video feed data:', data);
+            if (data.source === selectedSourceId) {
+                const img = document.getElementById('video-feed');
+                img.src = URL.createObjectURL(new Blob([data.frame]));
+            }
+        });
+
+        function openNav() {
+            document.getElementById("mySideBar").style.width = "200px";
+            document.querySelector('.main-content').style.marginLeft = "200px";
+        }
+
+        function closeNav() {
+            document.getElementById("mySideBar").style.width = "0";
+            document.querySelector('.main-content').style.marginLeft = "0";
+        }
+    </script>
+</body>
+</html>

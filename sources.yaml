@@ -1,0 +1,8 @@
+batch_size: 5
+sources:
+  - type: "webcam"
+    id: 0
+    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det/int_webcam"
+  - type: "webcam"
+    id: 2
+    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det/usb_webcam"
