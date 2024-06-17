@@ -6,3 +6,6 @@ sources:
   - type: "webcam"
     id: 2
     save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det/usb_webcam"
+  - type: "video"
+    id : "https://www.youtube.com/watch?v=yWHdkK5j4yk&t=17s"
+    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det/video"

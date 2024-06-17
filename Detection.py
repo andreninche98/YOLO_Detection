@@ -39,7 +39,8 @@ classes_to_discard = ["car", "truck"]
 # Funzione per fare la detection su un frame
 def detect(frame, model, model_type):
     original_frame = frame.copy()
-    img = transform(original_frame).unsqueeze(0)  # Prepara l'immagine per YOLOv5
+    img_tens = cv2.resize(original_frame, (416, 416))
+    img = transform(img_tens).unsqueeze(0)  # Prepara l'immagine per YOLOv5
     pred = model(img)[0]  # Esegui la prediction
     pred = non_max_suppression(pred, conf_thres=0.3, iou_thres=0.5)[0] # Rimuovi le detection con bassa confidence
     metadata = []

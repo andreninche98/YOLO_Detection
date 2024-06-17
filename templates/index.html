@@ -95,8 +95,9 @@
 <body>
     <div class="sidebar" id="mySideBar">
         <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
-        <a href="#" onclick="selectWebcam('0')">Integrated Webcam</a>
-        <a href="#" onclick="selectWebcam('2')">USB Webcam</a>
+        <a href="#" onclick="selectSource('0')">Integrated Webcam</a>
+        <a href="#" onclick="selectSource('2')">USB Webcam</a>
+        <a href="#" onclick="selectSource('https://www.youtube.com/watch?v=yWHdkK5j4yk&t=17s')">Youtube Video</a>
         <a href="#" onclick="viewResults()">View Results</a>
     </div>
     <div class="main-content">
@@ -144,7 +145,7 @@
             document.getElementById('status').innerText = 'Status: ' + status;
         }
 
-        function selectWebcam(sourceId) {
+        function selectSource(sourceId) {
             selectedSourceId = sourceId;
 
         }

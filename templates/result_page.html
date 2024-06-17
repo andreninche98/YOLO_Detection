@@ -46,41 +46,50 @@
 
    <script>
         async function fetchSavedFramesMetadata() {
-            const response = await fetch('/list_saved_frames_metadata');
-            const framesMetadata = await response.json();
-            const container = document.getElementById('metadata-container');
+    const response = await fetch('/list_saved_frames_metadata');
+    const framesMetadata = await response.json();
+    const container = document.getElementById('metadata-container');
 
-                for (const modelType in framesMetadata) {
-                    const modelFolder = document.createElement('div');
-                    modelFolder.classList.add('folder');
-                    modelFolder.textContent = `Model: ${modelType}`;
-                    container.appendChild(modelFolder);
+    // Itera su ogni modelType
+    for (const modelType in framesMetadata) {
+        // Crea la cartella per il modelType
+        const modelFolder = document.createElement('div');
+        modelFolder.classList.add('folder');
+        modelFolder.textContent = `Class: ${modelType}`;
+        container.appendChild(modelFolder);
 
-                    for (const date in framesMetadata[modelType]) {
-                        const dateFolder = document.createElement('div');
-                        dateFolder.classList.add('folder');
-                        dateFolder.textContent = `Date: ${date}`;
-                        container.appendChild(dateFolder);
+        // Itera su ogni data per questo modelType
+        for (const date in framesMetadata[modelType]) {
+            // Crea la cartella per la data
+            const dateFolder = document.createElement('div');
+            dateFolder.classList.add('folder');
+            dateFolder.textContent = `Date: ${date}`;
+            modelFolder.appendChild(dateFolder);
 
-                        for (const className in framesMetadata[modelType][date]) {
-                            const classNameFolder = document.createElement('div');
-                            classNameFolder.classList.add('folder');
-                            classNameFolder.textContent = `Class: ${className}`;
-                            dateFolder.appendChild(classNameFolder);
+            // Itera su ogni className per questa data
+            for (const className in framesMetadata[modelType][date]) {
+                // Crea la cartella per il className
+                const classNameFolder = document.createElement('div');
+                classNameFolder.classList.add('folder');
+                classNameFolder.textContent = `Model: ${className}`;
+                dateFolder.appendChild(classNameFolder);
 
-                            const detections = framesMetadata[modelType][date][className];
-                            detections.forEach(metadata => {
-                                const metadataContainer = document.createElement('div');
-                                metadataContainer.classList.add('metadata-entry');
-                                metadataContainer.textContent = JSON.stringify(metadata);
-                                classNameFolder.appendChild(metadataContainer);
-                            });
-                        }
-                    }
-                }
+                // Ottieni i metadata per questo className, ordinati per timestamp
+                const detections = framesMetadata[modelType][date][className];
+                detections.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+                // Itera su ogni metadata ordinato per timestamp
+                detections.forEach(metadata => {
+                    const metadataContainer = document.createElement('div');
+                    metadataContainer.classList.add('metadata-entry');
+                    metadataContainer.textContent = JSON.stringify(metadata);
+                    classNameFolder.appendChild(metadataContainer);
+                });
+            }
         }
-
-        fetchSavedFramesMetadata();
+    }
+}
+fetchSavedFramesMetadata()
    </script>
 </body>
 </html>

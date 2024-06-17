@@ -5,6 +5,7 @@ import multiprocessing
 import json
 import base64
 import yaml
+from pytube import YouTube
 import os
 import frame_handler
 import Detection
@@ -17,6 +18,7 @@ manager = multiprocessing.Manager()
 return_dict = manager.dict()
 capture_processes = []
 capturing = False
+
 
 def load_config(config_path):
     with open(config_path, "r") as file:
@@ -102,6 +104,11 @@ def capture_frames(source, return_dict):
 
         if source['type'] == 'webcam':
             cap = cv2.VideoCapture(source['id'])
+        elif source['type'] == 'video':
+            video_path = download_youtube_video(source['id'], source['save_directory'])
+            if not video_path:
+                raise ValueError(f"Failed to download video from URL: {source['id']}")
+            cap = cv2.VideoCapture(video_path)
         else:
             raise ValueError(f"Unsupported source type: {source['type']}")
 
@@ -169,6 +176,20 @@ def load_saved_frames_metadata():
 
     return metadata
 
+def download_youtube_video(url, save_path):
+    try:
+        print(f"[INFO] Downloading video from URL: {url}")
+        yt = YouTube(url)
+        stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
+        if not stream:
+            raise ValueError("No suitable stream found")
+        stream.download(output_path=save_path, filename='downloaded_video.mp4')
+        video_path = os.path.join(save_path, 'downloaded_video.mp4')
+        print(f"[INFO] Video downloaded to: {video_path}")
+        return video_path
+    except Exception as e:
+        print(f"[ERROR] Error downloading video: {e}")
+        return None
 
 
 if __name__ == "__main__":
