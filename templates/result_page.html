@@ -14,6 +14,7 @@
         }
         .folder {
             margin-bottom: 10px;
+            margin-right: 10px;
             font-weight: bold;
         }
         #frames-container {
@@ -25,9 +26,14 @@
             margin-right: 10px;
             margin-bottom: 10px;
         }
+        .frame-container img {
+            max-width: 200px;
+            max-height: 200px;
+            cursor: pointer;
+        }
         .metadata {
-            font-size: 12px;
-            color: #888;
+            font-size: 16px;
+            color: #333333;
         }
         #class-select, #model-select {
             display: flex;
@@ -109,7 +115,11 @@
 
                                 filenames.forEach(filename => {
                                     const img = document.createElement('img');
-                                    img.src = `/saved_frames/${sourceId}/${modelType}/${date}/${className}/${detection}/${filename}`;
+                                    const imgSrc = `/saved_frames/${sourceId}/${modelType}/${date}/${className}/${detection}/${filename}`;
+                                    img.src = imgSrc;
+                                    img.onclick = function () {
+                                        window.open(imgSrc, '_blank');
+                                    }
                                     frameContainer.appendChild(img);
                                     fetchAndDisplayMetadata(frameContainer, sourceId, modelType, date, className, detection, filename);
                                 });
@@ -192,7 +202,9 @@
 
         async function fetchAndDisplayMetadata(container, sourceId, modelType, date, className, detection, filename) {
             const metadataFilename = filename.replace('.jpg', '.json');
-            const response = await fetch(`/saved_frames/${sourceId}/${modelType}/${date}/${className}/${detection}/${metadataFilename}`);
+            const metadataPath = `/saved_frames/${sourceId}/${modelType}/${date}/${className}/${detection}/${metadataFilename}`;
+            console.log(`Fetching metadata from: ${metadataPath}`);
+            const response = await fetch(metadataPath);
             const metadata = await response.json();
             container.appendChild(createMetadataElement(metadata));
         }

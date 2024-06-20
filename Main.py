@@ -17,11 +17,12 @@ import Detection
 app = Flask(__name__, template_folder='/home/andrea/PycharmProjects/YOLO_Detection/templates')
 socketio = SocketIO(app)
 manager = multiprocessing.Manager()
-return_dict = manager.dict()
+captured_frame_dict = manager.dict()
+annotated_frame_dict = manager.dict()
 capture_processes = []
 capturing = False
 stop_event = manager.Event()
-results = []
+
 
 
 def load_config(config_path):
@@ -60,7 +61,7 @@ def start_stream():
             p.start()
 
         for source in config['sources']:
-            p = multiprocessing.Process(target=capture_frames, args=(source, return_dict, stop_event))
+            p = multiprocessing.Process(target=capture_frames, args=(source, captured_frame_dict, stop_event))
             capture_processes.append(p)
 
         for p in capture_processes:
@@ -80,7 +81,7 @@ def stop_stream():
         for p in capture_processes:
             p.join()
 
-        capture_processes.clear()
+        #capture_processes.clear()
         raw_stream_running = False
         return jsonify(status='Raw stream stopped')
     else:
@@ -89,13 +90,13 @@ def stop_stream():
 
 @app.route('/detect', methods=['POST'])
 def detect():
-    global return_dict, annotated_stream_running, stop_event
+    global captured_frame_dict, annotated_stream_running, stop_event
     if not annotated_stream_running:
         try:
             annotated_stream_running = True
             detection_processes = []
             for source in config['sources']:
-                p = multiprocessing.Process(target=process_frame, args=(source, return_dict, batch_size))
+                p = multiprocessing.Process(target=process_frame, args=(source, captured_frame_dict, batch_size))
                 detection_processes.append(p)
                 p.start()
 
@@ -142,13 +143,13 @@ def list_saved_frames():
                                             frames[source_id][model_type][date][class_name][detection] = os.listdir(detection_path)
     return jsonify(frames)
 
-@app.route('/saved_frames/<source_id>/<model_type>/<date>/<class_name>/<filename>')
-def serve_saved_frame(source_id, model_type, date, class_name, filename):
-    return send_from_directory(os.path.join("/home/andrea/PycharmProjects/YOLO_Detection/frame_det", source_id, model_type, date, class_name), filename)
+@app.route('/saved_frames/<path:filename>')
+def serve_saved_frame(filename):
+    return send_from_directory("/home/andrea/PycharmProjects/YOLO_Detection/frame_det", filename)
 
 
 
-def capture_frames(source, return_dict, stop_event):
+def capture_frames(source, captured_frame_dict, stop_event):
     try:
         frames_list = []
         print(f"[INFO] Starting capture from source: {source['type'], source['id']}")
@@ -178,7 +179,7 @@ def capture_frames(source, return_dict, stop_event):
             frames_list.append(frame)
             print(f"[INFO] Frame captured from source: {source['type'], source['id']}, {len(frames_list)} captured")
 
-            return_dict[source['id']] = frames_list
+            captured_frame_dict[source['id']] = frames_list
 
         print(f"[INFO] Finished capture from source: {source['type'], source['id']}")
         cap.release()
@@ -191,23 +192,24 @@ def capture_frames(source, return_dict, stop_event):
 
 def detect_with_yolo(frames, save_path, source_id):
     try:
-        global return_dict
+        global annotated_frame_dict
         detections = Detection.detect_batch(frames, Detection.models)
         for annotated_frame, metadata in detections:
-            return_dict[source_id] = (annotated_frame, metadata)
-            frame_handler.add_detection_job(frames, metadata, save_path, str(source_id))
+            annotated_frame_dict[source_id] = (annotated_frame, metadata)
+            if len(detections) >= batch_size:
+                frame_handler.add_detection_job(frames, metadata, save_path, str(source_id))
         return True
     except Exception as e:
         print(f"[ERROR] Error detecting with yolo: {e}")
         return False
 
 
-def process_frame(source, return_dict, batch_size):
+def process_frame(source, captured_frame_dict, batch_size):
     source_id = source['id']
-    if source_id not in return_dict or len(return_dict[source_id]) == 0:
+    if source_id not in captured_frame_dict or len(captured_frame_dict[source_id]) == 0:
         print(f"[WARNING] No frames captured from source: {source}")
     else:
-        source_frames = return_dict[source_id]
+        source_frames = captured_frame_dict[source_id]
         for i in range(0, len(source_frames), batch_size):
             batch = source_frames[i:i + batch_size]
             print(f"[INFO] Processing batch for {source['save_directory']}")
@@ -217,17 +219,15 @@ def process_frame(source, return_dict, batch_size):
                 print(f"[ERROR] Error during detection batch processing: {e}")
 
 
-def generate_raw_mjpeg_stream():
-    global return_dict, stop_event
+def generate_raw_mjpeg_stream(frames_dict, source_id):
+    global captured_frame_dict, stop_event
 
     try:
         while not stop_event.is_set():
             if raw_stream_running:
-                for source in config['sources']:
-                    source_id = source['id']
-                    if source_id in return_dict and len(return_dict[source_id]) > 0:
+                    if source_id in captured_frame_dict and len(captured_frame_dict[source_id]) > 0:
                         time.sleep(0.1)
-                        frame = return_dict[source_id][-1]  # Prendi l'ultimo frame catturato
+                        frame = captured_frame_dict[source_id][-1]  # Prendi l'ultimo frame catturato
                         _, jpeg = cv2.imencode('.jpg', frame)
                         frame = jpeg.tobytes()
                         yield (b'--frame\r\n'
@@ -238,99 +238,37 @@ def generate_raw_mjpeg_stream():
         return
 
 
-def generate_annotated_mjpeg_stream():
-    global return_dict, stop_event
+def generate_annotated_mjpeg_stream(frames_dict, source_id):
+    global annotated_frame_dict, stop_event
     try:
         while not stop_event.is_set():
             if annotated_stream_running:
-                for source_id in return_dict.keys():
-                    time.sleep(0.1)
+                if source_id in annotated_frame_dict.keys():
                     try:
-                        annotated_frame = return_dict[source_id][0]
+                        time.sleep(0.1)
+                        annotated_frame = annotated_frame_dict[source_id][0]
                         _, jpeg = cv2.imencode('.jpg', annotated_frame)
                         frame = jpeg.tobytes()
                     except Exception as e:
                         print(f"[ERROR] Exception occurred: {e}")
                         return
-                    print(f"[DEBUG] Sending annotated frame: Shape {len(frame)}")
                     yield (b'--frame\r\n'
                            b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
     except Exception as e:
         print(f"[ERROR] Error generating annotated MJPEG stream: {e}")
         return
 
-@app.route('/raw_stream')
-def raw_stream():
-    return Response(generate_raw_mjpeg_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/raw_stream/<int:source_id>')
+def raw_stream(source_id):
+    return Response(generate_raw_mjpeg_stream(captured_frame_dict, source_id), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-@app.route('/annotated_stream')
-def annotated_stream():
-    return Response(generate_annotated_mjpeg_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/annotated_stream/<int:source_id>')
+def annotated_stream(source_id):
+    return Response(generate_annotated_mjpeg_stream(annotated_frame_dict, source_id), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-def load_saved_frames_metadata():
-    try:
-        metadata = {}
-        save_path = "/home/andrea/PycharmProjects/YOLO_Detection/frame_det"
-
-        for source_id in os.listdir(save_path):
-            source_path = os.path.join(save_path, source_id)
-            if not os.path.isdir(source_path):
-                continue
-
-            metadata[source_id] = {}
-
-            for model_type in os.listdir(source_path):
-                model_path = os.path.join(source_path, model_type)
-                if not os.path.isdir(model_path):
-                    continue
-
-                metadata[source_id][model_type] = {}
-
-                for date in os.listdir(model_path):
-                    date_path = os.path.join(model_path, date)
-                    if not os.path.isdir(date_path):
-                        continue
-
-                    metadata[source_id][model_type][date] = {}
-
-                    for class_name in os.listdir(date_path):
-                        class_path = os.path.join(date_path, class_name)
-                        if not os.path.isdir(class_path):
-                            continue
-
-                        metadata[source_id][model_type][date][class_name] = []
-
-                        for detection_folder in os.listdir(class_path):
-                            detection_path = os.path.join(class_path, detection_folder)
-                            if not os.path.isdir(detection_path):
-                                continue
-
-                            # Assume che ci sia un solo frame e un solo metadata per ogni detection
-                            frame_files = [f for f in os.listdir(detection_path) if
-                                           f.startswith('frame_') and f.endswith('.jpg')]
-                            metadata_files = [f for f in os.listdir(detection_path) if
-                                              f.startswith('metadata_') and f.endswith('.json')]
-
-                            if len(frame_files) != 1 or len(metadata_files) != 1:
-                                continue
-
-                            frame_filename = os.path.join(detection_path, frame_files[0])
-                            metadata_filename = os.path.join(detection_path, metadata_files[0])
-
-                            try:
-                                with open(metadata_filename, 'r') as f:
-                                    data = json.load(f)
-                                    data['frame_filename'] = frame_filename  # Aggiungi il percorso dell'immagine del frame
-                                    metadata[source_id][model_type][date][class_name].append(data)
-                            except Exception as e:
-                                print(f"Error loading frame or metadata for {detection_folder}: {e}")
-
-                return metadata
-    except Exception as e:
-        print(f"Error in load_saved_frames_metadata: {e}")
-        raise
 
 def download_youtube_video(url, save_path):
     try:
