@@ -2,10 +2,10 @@ batch_size: 5
 sources:
   - type: "webcam"
     id: 0
-    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det/int_webcam"
+    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det"
   - type: "webcam"
     id: 2
-    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det/usb_webcam"
+    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det"
   - type: "video"
-    id : "https://www.youtube.com/watch?v=yWHdkK5j4yk&t=17s"
-    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det/video"
+    id : "https://www.youtube.com/watch?v=6oPTIW4P9s0"
+    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det"

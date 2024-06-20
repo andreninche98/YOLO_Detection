@@ -39,17 +39,20 @@ classes_to_discard = ["car", "truck"]
 # Funzione per fare la detection su un frame
 def detect(frame, model, model_type):
     original_frame = frame.copy()
-    img_tens = cv2.resize(original_frame, (416, 416))
+    img_tens = cv2.resize(original_frame, (640, 480))
     img = transform(img_tens).unsqueeze(0)  # Prepara l'immagine per YOLOv5
     pred = model(img)[0]  # Esegui la prediction
-    pred = non_max_suppression(pred, conf_thres=0.3, iou_thres=0.5)[0] # Rimuovi le detection con bassa confidence
+    pred = non_max_suppression(pred, conf_thres=0.5, iou_thres=0.5)[0] # Rimuovi le detection con bassa confidence
     metadata = []
     if pred is not None and len(pred) > 0:
-        frame = original_frame.copy()
+        frame = img_tens.copy()
         img_shape = frame.shape[:2]
         pred[:, :4] = scale_segments(img_shape, pred[:, :4], img.shape[2:])  # Ridimensiona le coordinate
         for det in pred:
-            xmin, ymin, xmax, ymax, conf, cls = det.cpu().numpy().astype(int)
+            det_np = det.cpu().numpy()
+            xmin, ymin, xmax, ymax = det_np[:4].astype(int)
+            conf = float(det_np[4])
+            cls = det_np[5].astype(int)
             class_name = class_names[cls]
             if class_name in classes_to_discard:
                 continue
@@ -58,16 +61,16 @@ def detect(frame, model, model_type):
                 if model_type != expected_model_type:
                     continue
             cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (255, 0, 0), 2)  # Disegna il rettangolo intorno all'oggetto
-            cv2.putText(frame, f'{class_name} ({model_type})', (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(255, 0, 0), 2)  # Aggiungi il label dell'oggetto
+            cv2.putText(frame, f'{class_name}: {conf:.2f} ({model_type})', (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(255, 0, 0), 2)  # Aggiungi il label dell'oggetto
             selected_model_type = class_model_mapping.get(class_name.lower(), "MID")
             metadata.append({
                     "class_name": class_name,
                     "bbox": [xmin, ymin, xmax, ymax],
-                    "confidence": float(conf),
+                    "confidence": float(f"{conf:.2f}"),
                     "model_type": selected_model_type,
                     "timestamp": datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
                 })
-    return metadata
+    return frame, metadata
 
 
 def detect_batch(frames, models):
@@ -75,8 +78,8 @@ def detect_batch(frames, models):
         batch_results = []
         for frame in frames:
             for model, model_type in zip(models, ["YOLO", "TINY", "MID"]):
-                result_frame = detect(frame, model, model_type)
-                batch_results.extend(result_frame)
+                annotated_frame, metadata = detect(frame, model, model_type)
+                batch_results.append((annotated_frame, metadata))
         return batch_results
     except Exception as e:
         print(f"Error det batch: {e}")

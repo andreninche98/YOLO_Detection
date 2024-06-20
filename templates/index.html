@@ -83,12 +83,6 @@
             padding: 10px 20px;
             font-size: 16px;
         }
-        .model-classes {
-            margin: 10px 0;
-        }
-        .model-classes label {
-            margin-right: 10px;
-        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
 </head>
@@ -97,7 +91,7 @@
         <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
         <a href="#" onclick="selectSource('0')">Integrated Webcam</a>
         <a href="#" onclick="selectSource('2')">USB Webcam</a>
-        <a href="#" onclick="selectSource('https://www.youtube.com/watch?v=yWHdkK5j4yk&t=17s')">Youtube Video</a>
+        <a href="#" onclick="selectSource('https://www.youtube.com/watch?v=6oPTIW4P9s0')">Youtube Video</a>
         <a href="#" onclick="viewResults()">View Results</a>
     </div>
     <div class="main-content">
@@ -110,12 +104,19 @@
         </div>
         <div id="class-selectors"></div>
         <div id="status">Status: Unknown</div>
-        <img id="video-feed" src="" alt="Video-Feed" width="640" height="480">
+        <img id="video-feed" src="/raw_stream" alt="Video-Feed" width="640" height="480">
     </div>
 
     <script>
         const socket = io();
         let selectedSourceId = 0;
+        let rawStreamActive = true;
+
+        const sourceUrls = {
+            '0': '/raw_stream?source=0',
+            '2': '/raw_stream?source=2',
+            'https://www.youtube.com/watch?v=6oPTIW4P9s0': '/raw_stream?source=youtube&url=https://www.youtube.com/watch?v=6oPTIW4P9s0'
+        };
 
         async function startStream() {
             const response = await fetch('/start', { method: 'POST'});
@@ -133,6 +134,7 @@
             const response = await fetch('/detect', { method: 'POST' });
             const result = await response.json();
             updateStatus(result.status);
+            switchToAnnotatedStream();
         }
 
         async function getStatus() {
@@ -145,25 +147,38 @@
             document.getElementById('status').innerText = 'Status: ' + status;
         }
 
-        function selectSource(sourceId) {
-            selectedSourceId = sourceId;
-
+        async function selectSource(sourceId) {
+            const img = document.getElementById('video-feed');
+            img.src = sourceUrls[sourceId] || '/raw_stream';
+            rawStreamActive = true;
+            updateStatus(`Source selected: ${sourceId}`);
         }
 
         function viewResults() {
             window.location.href = '/results'
         }
 
+        function switchToRawStream() {
+            const img = document.getElementById('video-feed');
+            img.src = '/raw_stream';
+            rawStreamActive = true;
+        }
+
+        function switchToAnnotatedStream() {
+            const img = document.getElementById('video-feed');
+            img.src = '/annotated_stream';
+            rawStreamActive = false;
+        }
+
         // Check status periodically
         setInterval(getStatus, 1000);
 
-        socket.on('video_feed', function (data){
-            console.log('Received video feed data:', data);
-            if (data.source === selectedSourceId) {
-                const img = document.getElementById('video-feed');
-                img.src = URL.createObjectURL(new Blob([data.frame]));
-            }
+        socket.on('annotated_frame', function (data){
+            console.log('Received annotated frame data:', data);
+            const img = document.getElementById('video-feed');
+            img.src = 'data:image/jpeg;base64,' + data.frame;
         });
+
 
         function openNav() {
             document.getElementById("mySideBar").style.width = "200px";

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1,0">
-    <title>Saved Frames Metadata</title>
+    <title>Saved Results</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,80 +16,188 @@
             margin-bottom: 10px;
             font-weight: bold;
         }
-        .frame-container {
+        #frames-container {
             display: flex;
             flex-wrap: wrap;
-            justify-content: center;
-            gap: 20px;
-            margin-top: 20px;
+            justify-content: flex-start;
         }
-        .frame-boox {
-            border: 2px solid black;
-            padding: 10px;
-            width: 300px;
-            min-height: 100px;
+        .frame-container {
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .metadata {
+            font-size: 12px;
+            color: #888;
+        }
+        #class-select, #model-select {
             display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: flex-start;
-        }
-        .frame-info {
+            justify-content: flex-start;
+            gap: 20px;
             margin-top: 10px;
-            font-size: 14px;
+            margin-right: 10px;
+            padding: 10px 10px;
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
-   <h1>Saved Frames</h1>
+   <h1>Saved Results</h1>
    <button onclick="location.href='/'">Back to Main</button>
-   <div id="metadata-container"></div>
+   <select id="class-select" onchange="filterFrames()">
+    <option value="">All Classes</option>
+   </select>
+
+   <select id="model-select" onchange="filterFrames()">
+    <option value="">All Models</option>
+   </select>
+
+   <div id="frames-container"></div>
 
    <script>
-        async function fetchSavedFramesMetadata() {
-    const response = await fetch('/list_saved_frames_metadata');
-    const framesMetadata = await response.json();
-    const container = document.getElementById('metadata-container');
+       let frames = {};
+       async function fetchSavedFrames() {
+            const response = await fetch('/list_saved_frames');
+            frames = await response.json();
+            populateFilterOptions();
+            const container = document.getElementById('frames-container');
 
-    // Itera su ogni modelType
-    for (const modelType in framesMetadata) {
-        // Crea la cartella per il modelType
-        const modelFolder = document.createElement('div');
-        modelFolder.classList.add('folder');
-        modelFolder.textContent = `Class: ${modelType}`;
-        container.appendChild(modelFolder);
+            for (const sourceId in frames) {
+                const sourceFolder = document.createElement('div');
+                sourceFolder.classList.add('folder', 'source-folder');
+                sourceFolder.setAttribute('data-source-id', sourceId);
+                sourceFolder.textContent = `Source: ${sourceId}`;
+                container.appendChild(sourceFolder);
 
-        // Itera su ogni data per questo modelType
-        for (const date in framesMetadata[modelType]) {
-            // Crea la cartella per la data
-            const dateFolder = document.createElement('div');
-            dateFolder.classList.add('folder');
-            dateFolder.textContent = `Date: ${date}`;
-            modelFolder.appendChild(dateFolder);
+                for (const modelType in frames[sourceId]) {
+                    const modelFolder = document.createElement('div');
+                    modelFolder.classList.add('folder', 'model-folder');
+                    modelFolder.setAttribute('data-model-type', modelType);
+                    modelFolder.textContent = `Model: ${modelType}`;
+                    sourceFolder.appendChild(modelFolder);
 
-            // Itera su ogni className per questa data
-            for (const className in framesMetadata[modelType][date]) {
-                // Crea la cartella per il className
-                const classNameFolder = document.createElement('div');
-                classNameFolder.classList.add('folder');
-                classNameFolder.textContent = `Model: ${className}`;
-                dateFolder.appendChild(classNameFolder);
+                    for (const date in frames[sourceId][modelType]) {
+                        const dateFolder = document.createElement('div');
+                        dateFolder.classList.add('folder', 'date-folder');
+                        dateFolder.setAttribute('data-date', date);
+                        dateFolder.textContent = `Date: ${date}`;
+                        modelFolder.appendChild(dateFolder);
 
-                // Ottieni i metadata per questo className, ordinati per timestamp
-                const detections = framesMetadata[modelType][date][className];
-                detections.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+                        for (const className in frames[sourceId][modelType][date]) {
+                            const classNameFolder = document.createElement('div');
+                            classNameFolder.classList.add('folder', 'class-folder');
+                            classNameFolder.setAttribute('data-class-name', className);
+                            classNameFolder.textContent = `Class: ${className}`;
+                            dateFolder.appendChild(classNameFolder);
 
-                // Itera su ogni metadata ordinato per timestamp
-                detections.forEach(metadata => {
-                    const metadataContainer = document.createElement('div');
-                    metadataContainer.classList.add('metadata-entry');
-                    metadataContainer.textContent = JSON.stringify(metadata);
-                    classNameFolder.appendChild(metadataContainer);
-                });
+                            for (const detection in frames[sourceId][modelType][date][className]) {
+                                const detectionFolder = document.createElement('div');
+                                detectionFolder.classList.add('folder', 'detection-folder');
+                                detectionFolder.setAttribute('data-detectio', detection);
+                                detectionFolder.textContent = `Detection: ${detection}`;
+                                classNameFolder.appendChild(detectionFolder);
+
+                                const frameContainer = document.createElement('div');
+                                frameContainer.classList.add('frame-container');
+                                detectionFolder.appendChild(frameContainer);
+
+                                const filenames = frames[sourceId][modelType][date][className][detection];
+                                filenames.sort((a, b) => {
+                                    const timestampA = extractTimestamp(a);
+                                    const timestampB = extractTimestamp(b);
+                                    return timestampA - timestampB;
+                                });
+
+                                filenames.forEach(filename => {
+                                    const img = document.createElement('img');
+                                    img.src = `/saved_frames/${sourceId}/${modelType}/${date}/${className}/${detection}/${filename}`;
+                                    frameContainer.appendChild(img);
+                                    fetchAndDisplayMetadata(frameContainer, sourceId, modelType, date, className, detection, filename);
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            filterFrames();
+       }
+       function populateFilterOptions() {
+        const classSelect = document.getElementById('class-select');
+        const modelSelect = document.getElementById('model-select');
+
+        const classes = new Set();
+        const models = new Set();
+
+        for (const sourceId in frames) {
+            for (const modelType in frames[sourceId]) {
+                models.add(modelType);
+                for (const date in frames[sourceId][modelType]) {
+                    for (const className in frames[sourceId][modelType][date]) {
+                        classes.add(className);
+                    }
+                }
             }
         }
+
+        classes.forEach(className => {
+            const option = document.createElement('option');
+            option.value = className;
+            option.textContent = className;
+            classSelect.appendChild(option);
+        });
+
+        models.forEach(modelType => {
+            const option = document.createElement('option');
+            option.value = modelType;
+            option.textContent = modelType;
+            modelSelect.appendChild(option);
+        });
     }
-}
-fetchSavedFramesMetadata()
+    function filterFrames() {
+            const classFilter = document.getElementById('class-select').value;
+            const modelFilter = document.getElementById('model-select').value;
+            const container = document.getElementById('frames-container');
+
+            for (const sourceId in frames) {
+                const sourceFolder = container.querySelector(`.source-folder[data-source-id="${sourceId}"]`);
+                for (const modelType in frames[sourceId]) {
+                    const modelFolder = sourceFolder.querySelector(`.model-folder[data-model-type="${modelType}"]`);
+                    modelFolder.style.display = modelFilter && modelType !== modelFilter ? 'none' : '';
+
+                    for (const date in frames[sourceId][modelType]) {
+                        const dateFolder = modelFolder.querySelector(`.date-folder[data-date="${date}"]`);
+
+                        for (const className in frames[sourceId][modelType][date]) {
+                            const classNameFolder = dateFolder.querySelector(`.class-folder[data-class-name="${className}"]`);
+                            classNameFolder.style.display = classFilter && className !== classFilter ? 'none' : '';
+                        }
+                    }
+                }
+            }
+        }
+
+        function extractTimestamp(filename){
+           const match = filename.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})-(\d{3})\.jpg/);
+           if (match){
+               const [, year, month, day, hour, minute, second, millisecond] = match;
+               return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}.${millisecond}Z`).getTime();
+           }
+           return 0;
+        }
+        function createMetadataElement(metadata) {
+            const metadataDiv = document.createElement('div');
+            metadataDiv.className = 'metadata';
+            metadataDiv.textContent = JSON.stringify(metadata, null, 2);
+            return metadataDiv;
+        }
+
+        async function fetchAndDisplayMetadata(container, sourceId, modelType, date, className, detection, filename) {
+            const metadataFilename = filename.replace('.jpg', '.json');
+            const response = await fetch(`/saved_frames/${sourceId}/${modelType}/${date}/${className}/${detection}/${metadataFilename}`);
+            const metadata = await response.json();
+            container.appendChild(createMetadataElement(metadata));
+        }
+
+        fetchSavedFrames();
    </script>
 </body>
 </html>
