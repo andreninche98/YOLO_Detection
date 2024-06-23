@@ -7,39 +7,36 @@ from yolov5.models.experimental import attempt_load
 from yolov5.utils.general import non_max_suppression, scale_segments
 
 
-def load_models():
-    try:
-        model_yolo = attempt_load("yolov5s.pt")  # Carica il modello YOLOv5
-        model_tiny = attempt_load("yolov5n.pt")
-        model_mid = attempt_load("yolov5m.pt")
-    except Exception as e:
-        print(f"Error loading models: {e}")
-        return None, None, None
-    return model_yolo, model_tiny, model_mid
+with open("/home/andrea/PycharmProjects/YOLO_Detection/class_model_mapping.yaml", "r") as f:
+    config = yaml.safe_load(f)
 
-models = load_models()
+models = {}
+class_names = {}
+classes_to_detect = {}
+for model_config in config["models"]:
+    model_name = model_config["name"]
+    model_file = model_config["file"]
+    class_file = model_config["class_file"]
+    try:
+        models[model_name] = attempt_load(model_file)
+        with open(class_file, "r") as f:
+            data = yaml.safe_load(f)
+            class_names[model_name] = data["names"]
+        classes_to_detect[model_name] = {class_config["name"]: class_config["confidence_threshold"] for class_config in model_config["classes_to_detect"]}
+    except Exception as e:
+        print(f"Error loading model {model_file}: {e}")
+
 
 # Trasformazioni per il preprocessing delle immagini
 transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-with open("/home/andrea/PycharmProjects/VideoDetection/.venv/lib/python3.10/coco.yaml", "r") as f:
-    data = yaml.safe_load(f)
-    class_names = data["names"]
-
-class_model_mapping = {
-    "person": "YOLO",
-    "bed": "YOLO",
-    "bottle": "TINY",
-    "clock": "TINY",
-}
-
 classes_to_discard = ["car", "truck"]
 # Funzione per fare la detection su un frame
-def detect(frame, model, model_type):
+def detect(frame, model, model_name):
     original_frame = frame.copy()
-    img_tens = cv2.resize(original_frame, (640, 480))
+    img_tens = cv2.resize(original_frame, (320, 320))
     img = transform(img_tens).unsqueeze(0)  # Prepara l'immagine per YOLOv5
     pred = model(img)[0]  # Esegui la prediction
     pred = non_max_suppression(pred, conf_thres=0.5, iou_thres=0.5)[0] # Rimuovi le detection con bassa confidence
@@ -53,32 +50,35 @@ def detect(frame, model, model_type):
             xmin, ymin, xmax, ymax = det_np[:4].astype(int)
             conf = float(det_np[4])
             cls = det_np[5].astype(int)
-            class_name = class_names[cls]
-            if class_name in classes_to_discard:
+            try:
+                class_name = class_names[model_name][cls]
+            except KeyError:
+                print(
+                    f"Warning: Class index {cls} not found in class file for model {model_name}. Skipping this detection.")
                 continue
-            if class_name in class_model_mapping:
-                expected_model_type = class_model_mapping[class_name]
-                if model_type != expected_model_type:
-                    continue
+            class_confidence_threshold = classes_to_detect[model_name].get(class_name, 0.5)
+            if conf < class_confidence_threshold and class_name in classes_to_detect[model_name]:
+                continue
             cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (255, 0, 0), 2)  # Disegna il rettangolo intorno all'oggetto
-            cv2.putText(frame, f'{class_name}: {conf:.2f} ({model_type})', (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(255, 0, 0), 2)  # Aggiungi il label dell'oggetto
-            selected_model_type = class_model_mapping.get(class_name.lower(), "MID")
+            cv2.putText(frame, f'{class_name}: {conf:.2f} ({model_name})', (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5,(255, 0, 0), 2)  # Aggiungi il label dell'oggetto
             metadata.append({
                     "class_name": class_name,
                     "bbox": [xmin, ymin, xmax, ymax],
                     "confidence": float(f"{conf:.2f}"),
-                    "model_type": selected_model_type,
+                    "model_type": model_name,
                     "timestamp": datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
                 })
-    return frame, metadata
+            display_frame = cv2.resize(frame, (640,480))
+    return display_frame, metadata
 
 
-def detect_batch(frames, models):
+def detect_batch(frames, model_names):
     try:
         batch_results = []
         for frame in frames:
-            for model, model_type in zip(models, ["YOLO", "TINY", "MID"]):
-                annotated_frame, metadata = detect(frame, model, model_type)
+            for model_name in model_names:
+                model = models[model_name]
+                annotated_frame, metadata = detect(frame, model, model_name)
                 batch_results.append((annotated_frame, metadata))
         return batch_results
     except Exception as e:

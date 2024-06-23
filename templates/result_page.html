@@ -32,10 +32,10 @@
             cursor: pointer;
         }
         .metadata {
-            font-size: 16px;
+            font-size: 14px;
             color: #333333;
         }
-        #class-select, #model-select {
+        #class-select, #source-select, #date-select {
             display: flex;
             justify-content: flex-start;
             gap: 20px;
@@ -52,9 +52,11 @@
    <select id="class-select" onchange="filterFrames()">
     <option value="">All Classes</option>
    </select>
-
-   <select id="model-select" onchange="filterFrames()">
-    <option value="">All Models</option>
+   <select id="source-select" onchange="filterFrames()">
+    <option value="">All Sources</option>
+   </select>
+   <select id="date-select" onchange="filterFrames()">
+       <option value="">All Dates</option>
    </select>
 
    <div id="frames-container"></div>
@@ -117,9 +119,6 @@
                                     const img = document.createElement('img');
                                     const imgSrc = `/saved_frames/${sourceId}/${modelType}/${date}/${className}/${detection}/${filename}`;
                                     img.src = imgSrc;
-                                    img.onclick = function () {
-                                        window.open(imgSrc, '_blank');
-                                    }
                                     frameContainer.appendChild(img);
                                     fetchAndDisplayMetadata(frameContainer, sourceId, modelType, date, className, detection, filename);
                                 });
@@ -132,17 +131,20 @@
        }
        function populateFilterOptions() {
         const classSelect = document.getElementById('class-select');
-        const modelSelect = document.getElementById('model-select');
+        const sourceSelect = document.getElementById('source-select');
+        const dateSelect = document.getElementById('date-select');
 
         const classes = new Set();
-        const models = new Set();
+        const sources = new Set();
+        const dates = new Set();
 
         for (const sourceId in frames) {
-            for (const modelType in frames[sourceId]) {
-                models.add(modelType);
-                for (const date in frames[sourceId][modelType]) {
-                    for (const className in frames[sourceId][modelType][date]) {
-                        classes.add(className);
+                sources.add(sourceId);
+                for (const modelType in frames[sourceId]) {
+                    for (const date in frames[sourceId][modelType]) {
+                        dates.add(date);
+                        for (const className in frames[sourceId][modelType][date]) {
+                            classes.add(className);
                     }
                 }
             }
@@ -155,26 +157,36 @@
             classSelect.appendChild(option);
         });
 
-        models.forEach(modelType => {
+        sources.forEach(sourceId => {
             const option = document.createElement('option');
-            option.value = modelType;
-            option.textContent = modelType;
-            modelSelect.appendChild(option);
+            option.value = sourceId;
+            option.textContent = sourceId;
+            sourceSelect.appendChild(option);
+        });
+
+        dates.forEach(date => {
+            const option = document.createElement('option');
+            option.value = date;
+            option.textContent = date;
+            dateSelect.appendChild(option);
         });
     }
     function filterFrames() {
             const classFilter = document.getElementById('class-select').value;
-            const modelFilter = document.getElementById('model-select').value;
+            const sourceFilter = document.getElementById('source-select').value;
+            const dateFilter = document.getElementById('date-select').value;
             const container = document.getElementById('frames-container');
 
             for (const sourceId in frames) {
                 const sourceFolder = container.querySelector(`.source-folder[data-source-id="${sourceId}"]`);
+                sourceFolder.style.display = sourceFilter && sourceId !== sourceFilter ? 'none' : '';
+
                 for (const modelType in frames[sourceId]) {
                     const modelFolder = sourceFolder.querySelector(`.model-folder[data-model-type="${modelType}"]`);
-                    modelFolder.style.display = modelFilter && modelType !== modelFilter ? 'none' : '';
 
                     for (const date in frames[sourceId][modelType]) {
                         const dateFolder = modelFolder.querySelector(`.date-folder[data-date="${date}"]`);
+                        dateFolder.style.display = dateFilter && date !== dateFilter ? 'none' : '';
 
                         for (const className in frames[sourceId][modelType][date]) {
                             const classNameFolder = dateFolder.querySelector(`.class-folder[data-class-name="${className}"]`);
@@ -203,10 +215,16 @@
         async function fetchAndDisplayMetadata(container, sourceId, modelType, date, className, detection, filename) {
             const metadataFilename = filename.replace('.jpg', '.json');
             const metadataPath = `/saved_frames/${sourceId}/${modelType}/${date}/${className}/${detection}/${metadataFilename}`;
-            console.log(`Fetching metadata from: ${metadataPath}`);
             const response = await fetch(metadataPath);
             const metadata = await response.json();
             container.appendChild(createMetadataElement(metadata));
+            const img = container.querySelector('img');
+            img.onclick = function () {
+                const bbox = metadata.bbox.join(',');
+                const url = `/display_frame_with_bbox?source_id=${sourceId}&model_type=${modelType}&date=${date}&class_name=${className}&detection=${detection}&filename=${filename}&bbox=${bbox}`;
+                console.log(`Opening frame with bbox: ${url}`);
+                window.open(url, '_blank');
+            }
         }
 
         fetchSavedFrames();

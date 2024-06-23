@@ -1,5 +1,39 @@
-class_model_mapping:
-  person: "YOLO"
-  bed: "YOLO"
-  bottle: "TINY"
-  clock: "TINY"
+models:
+  - name: "YOLO"
+    file: "yolov5n.pt"
+    class_file: "/home/andrea/PycharmProjects/YOLO_Detection/.venv/lib/python3.10/site-packages/yolov5/data/coco.yaml"
+    classes_to_detect:
+      - name: "person"
+        confidence_threshold: 0.7
+      - name: "bottle"
+        confidence_threshold: 0.8
+      - name: "chair"
+        confidence_threshold: 0.6
+      - name: "cell phone"
+        confidence_threshold: 0.8
+  - name: "TINY"
+    file: "yolov5s.pt"
+    class_file: "/home/andrea/PycharmProjects/YOLO_Detection/.venv/lib/python3.10/site-packages/yolov5/data/coco.yaml"
+    classes_to_detect:
+      - name: "person"
+        confidence_threshold: 0.8
+      - name: "car"
+        confidence_threshold: 0.7
+      - name: "traffic light"
+        confidence_threshold: 0.8
+  - name: "MID"
+    file: "yolov5n6.pt"
+    class_file: "/home/andrea/PycharmProjects/YOLO_Detection/.venv/lib/python3.10/site-packages/yolov5/data/coco.yaml"
+    classes_to_detect:
+      - name: "person"
+        confidence_threshold: 0.7
+      - name: "bed"
+        confidence_threshold: 0.6
+      - name: "clock"
+        confidence_threshold: 0.8
+      - name: "cake"
+        confidence_threshold: 0.8
+      - name: "couch"
+        confidence_threshold: 0.7
+      - name: "tie"
+        confidence_threshold: 0.9

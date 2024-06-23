@@ -1,6 +1,5 @@
 import time
-
-from flask import Flask, render_template, request, jsonify, Response, send_from_directory
+from flask import Flask, render_template, request, jsonify, Response, send_from_directory, make_response
 from flask_socketio import SocketIO, emit
 import cv2
 import multiprocessing
@@ -41,6 +40,7 @@ worker_processes = [
 
 raw_stream_running = False
 annotated_stream_running = False
+detection_running = False
 
 
 @app.route('/')
@@ -74,14 +74,14 @@ def start_stream():
 
 @app.route('/stop', methods=['POST'])
 def stop_stream():
-    global capture_processes, capturing, raw_stream_running
+    global capture_processes, capturing, raw_stream_running, detection_running
     if raw_stream_running:
         capturing = False
         stop_event.set()
+        detection_running = False
         for p in capture_processes:
             p.join()
 
-        #capture_processes.clear()
         raw_stream_running = False
         return jsonify(status='Raw stream stopped')
     else:
@@ -90,20 +90,23 @@ def stop_stream():
 
 @app.route('/detect', methods=['POST'])
 def detect():
-    global captured_frame_dict, annotated_stream_running, stop_event
+    global captured_frame_dict, annotated_stream_running, stop_event, detection_running
     if not annotated_stream_running:
         try:
             annotated_stream_running = True
+            detection_running = True
             detection_processes = []
             for source in config['sources']:
                 p = multiprocessing.Process(target=process_frame, args=(source, captured_frame_dict, batch_size))
                 detection_processes.append(p)
                 p.start()
 
+
             return jsonify({"status": "Detection started"}), 200
 
         except Exception as e:
             annotated_stream_running = False
+            detection_running = False
             print(f"[ERROR] Error during detection: {e}")
             return jsonify({"status": "Error during detection", "error": str(e)}), 500
     else:
@@ -112,9 +115,10 @@ def detect():
 
 @app.route('/status', methods=['GET'])
 def status():
-    global raw_stream_running, annotated_stream_running
+    global raw_stream_running, annotated_stream_running, detection_running
     return jsonify(raw_stream='Running' if raw_stream_running else 'Stopped',
-                   annotated_stream='Running' if annotated_stream_running else 'Stopped')
+                   annotated_stream='Running' if annotated_stream_running else 'Stopped',
+                   detection='Detecting...' if detection_running else 'Detection stopped')
 
 
 @app.route('/list_saved_frames')
@@ -148,6 +152,35 @@ def serve_saved_frame(filename):
     return send_from_directory("/home/andrea/PycharmProjects/YOLO_Detection/frame_det", filename)
 
 
+@app.route('/display_frame_with_bbox', methods=['GET'])
+def display_frame_with_bbox():
+    source_id = request.args.get('source_id')
+    model_type = request.args.get('model_type')
+    date = request.args.get('date')
+    class_name = request.args.get('class_name')
+    detection = request.args.get('detection')
+    filename = request.args.get('filename')
+    bbox = request.args.get('bbox')
+
+    if not filename.endswith('.jpg'):
+        return "Error: The requested file is not a .jpg file", 400
+
+    img_path = f"/saved_frames/{source_id}/{model_type}/{date}/{class_name}/{detection}/{filename}"
+    img = cv2.imread(img_path)
+
+    if img is None:
+        return "Error: The image file could not be read", 400
+
+
+    xmin, ymin, xmax, ymax = map(int, bbox.split(','))
+    cv2.rectangle(img, (xmin, ymin), (xmax, ymax), (255, 0, 0), 2)
+
+    _, img_encoded = cv2.imencode('.jpg', img)
+    response = make_response(img_encoded.tobytes())
+    response.headers.set('Content-Type', 'image/jpg')
+
+    return response
+
 
 def capture_frames(source, captured_frame_dict, stop_event):
     try:
@@ -178,6 +211,8 @@ def capture_frames(source, captured_frame_dict, stop_event):
                 break
             frames_list.append(frame)
             print(f"[INFO] Frame captured from source: {source['type'], source['id']}, {len(frames_list)} captured")
+            if len(frames_list) >= 50:
+                frames_list.pop(0)
 
             captured_frame_dict[source['id']] = frames_list
 
@@ -194,10 +229,14 @@ def detect_with_yolo(frames, save_path, source_id):
     try:
         global annotated_frame_dict
         detections = Detection.detect_batch(frames, Detection.models)
+        print(f"[INFO] Processed {len(frames)} frames for detection from source: {source_id}")
         for annotated_frame, metadata in detections:
             annotated_frame_dict[source_id] = (annotated_frame, metadata)
             if len(detections) >= batch_size:
                 frame_handler.add_detection_job(frames, metadata, save_path, str(source_id))
+        del captured_frame_dict[source_id][:len(frames)]
+        remaining_frames = len(captured_frame_dict[source_id]) - len(frames)
+        print(f"[INFO] Remaining frames for detection from source {source_id}: {remaining_frames}")
         return True
     except Exception as e:
         print(f"[ERROR] Error detecting with yolo: {e}")
@@ -249,6 +288,7 @@ def generate_annotated_mjpeg_stream(frames_dict, source_id):
                         annotated_frame = annotated_frame_dict[source_id][0]
                         _, jpeg = cv2.imencode('.jpg', annotated_frame)
                         frame = jpeg.tobytes()
+                        del annotated_frame_dict[source_id]
                     except Exception as e:
                         print(f"[ERROR] Exception occurred: {e}")
                         return

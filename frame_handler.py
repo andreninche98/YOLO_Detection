@@ -1,11 +1,10 @@
 import os
 from datetime import datetime
-
 import cv2
 from rq import Queue, Worker, Connection
 from redis import Redis
 import json
-import Detection
+
 
 # Inizializza la connessione Redis
 redis_conn = Redis()
@@ -46,8 +45,8 @@ def save_detection_metadata(metadata, frame, save_path, source_id):
     with open(metadata_filename, 'w') as f:
         json.dump(detection_dict, f, indent=4)
     print(f"[INFO] Saved detection to {metadata_filename}")
-
     print(f"[INFO] Saved detection to {frame_filename}")
+
 
 
 def save_detection_metadata_batch(batch):
