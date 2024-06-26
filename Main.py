@@ -19,6 +19,7 @@ manager = multiprocessing.Manager()
 captured_frame_dict = manager.dict()
 annotated_frame_dict = manager.dict()
 capture_processes = []
+detection_processes = []
 capturing = False
 stop_event = manager.Event()
 
@@ -74,15 +75,26 @@ def start_stream():
 
 @app.route('/stop', methods=['POST'])
 def stop_stream():
-    global capture_processes, capturing, raw_stream_running, detection_running
+    global capture_processes, capturing, raw_stream_running
     if raw_stream_running:
         capturing = False
         stop_event.set()
-        detection_running = False
         for p in capture_processes:
             p.join()
 
+        for p in detection_processes:
+            if p.is_alive():
+                p.join()
+
+        for p in worker_processes:
+            if p.is_alive():
+                p.join()
+
         raw_stream_running = False
+
+        if all(not p.is_alive() for p in detection_processes) and all(not p.is_alive() for p in worker_processes):
+            print("All detection and worker processes have finished. Exiting program.")
+            os._exit(0)
         return jsonify(status='Raw stream stopped')
     else:
         return jsonify(status='Raw stream not running')
@@ -95,7 +107,6 @@ def detect():
         try:
             annotated_stream_running = True
             detection_running = True
-            detection_processes = []
             for source in config['sources']:
                 p = multiprocessing.Process(target=process_frame, args=(source, captured_frame_dict, batch_size))
                 detection_processes.append(p)
@@ -116,9 +127,14 @@ def detect():
 @app.route('/status', methods=['GET'])
 def status():
     global raw_stream_running, annotated_stream_running, detection_running
-    return jsonify(raw_stream='Running' if raw_stream_running else 'Stopped',
-                   annotated_stream='Running' if annotated_stream_running else 'Stopped',
-                   detection='Detecting...' if detection_running else 'Detection stopped')
+    if raw_stream_running:
+        return jsonify(status='Raw stream running')
+    elif annotated_stream_running:
+        return jsonify(status='Annotated strem running')
+    elif detection_running:
+        return jsonify(status='Detection running')
+    else:
+        return jsonify(status='Detection stopped')
 
 
 @app.route('/list_saved_frames')
@@ -165,9 +181,15 @@ def display_frame_with_bbox():
     if not filename.endswith('.jpg'):
         return "Error: The requested file is not a .jpg file", 400
 
-    img_path = f"/saved_frames/{source_id}/{model_type}/{date}/{class_name}/{detection}/{filename}"
-    img = cv2.imread(img_path)
+    source = next((s for s in config['sources'] if s['id'] == source_id), None)
+    if not source:
+        return "Invalid source id", 400
 
+    directory = source['save_directory']
+    img_path = os.path.join(directory, model_type, date, class_name, detection, filename)
+    if not os.path.isfile(img_path):
+        return "File not found", 400
+    img = cv2.imread(img_path)
     if img is None:
         return "Error: The image file could not be read", 400
 
@@ -211,8 +233,6 @@ def capture_frames(source, captured_frame_dict, stop_event):
                 break
             frames_list.append(frame)
             print(f"[INFO] Frame captured from source: {source['type'], source['id']}, {len(frames_list)} captured")
-            if len(frames_list) >= 50:
-                frames_list.pop(0)
 
             captured_frame_dict[source['id']] = frames_list
 

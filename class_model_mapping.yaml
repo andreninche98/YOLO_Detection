@@ -11,6 +11,8 @@ models:
         confidence_threshold: 0.6
       - name: "cell phone"
         confidence_threshold: 0.8
+      - name: "tie"
+        confidence_threshold: 0.9
   - name: "TINY"
     file: "yolov5s.pt"
     class_file: "/home/andrea/PycharmProjects/YOLO_Detection/.venv/lib/python3.10/site-packages/yolov5/data/coco.yaml"
@@ -25,8 +27,6 @@ models:
     file: "yolov5n6.pt"
     class_file: "/home/andrea/PycharmProjects/YOLO_Detection/.venv/lib/python3.10/site-packages/yolov5/data/coco.yaml"
     classes_to_detect:
-      - name: "person"
-        confidence_threshold: 0.7
       - name: "bed"
         confidence_threshold: 0.6
       - name: "clock"
@@ -35,5 +35,4 @@ models:
         confidence_threshold: 0.8
       - name: "couch"
         confidence_threshold: 0.7
-      - name: "tie"
-        confidence_threshold: 0.9
+

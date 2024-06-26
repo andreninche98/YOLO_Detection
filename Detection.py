@@ -32,7 +32,6 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-classes_to_discard = ["car", "truck"]
 # Funzione per fare la detection su un frame
 def detect(frame, model, model_name):
     original_frame = frame.copy()
@@ -68,8 +67,7 @@ def detect(frame, model, model_name):
                     "model_type": model_name,
                     "timestamp": datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
                 })
-            display_frame = cv2.resize(frame, (640,480))
-    return display_frame, metadata
+    return frame, metadata
 
 
 def detect_batch(frames, model_names):

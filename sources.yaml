@@ -6,6 +6,6 @@ sources:
   - type: "webcam"
     id: 2
     save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det"
-  #- type: "video"
-    #id : "https://www.youtube.com/watch?v=6oPTIW4P9s0"
-    #save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det"
+  - type: "video"
+    id : "https://www.youtube.com/watch?v=6oPTIW4P9s0"
+    save_directory: "/home/andrea/PycharmProjects/YOLO_Detection/frame_det"
